@@ -18,7 +18,7 @@ The current rules evaluate:
 - runnable shell commands in README
 - technical decision docs or ADRs
 - architecture docs or engineering case study
-- test surface
+- test surface, including recursive language-native test files and documented root verification scripts such as `bin/check` or `bin/ci`
 - GitHub Actions CI
 - workspace context-pack coverage/freshness when a `.agents/context-packs` registry is present
 - Railway/deployment surface when recommended
@@ -61,7 +61,7 @@ bin/eval-harness ../rails_doctor --fail-on fail
 - `pass`: evidence exists for the rule.
 - `n/a`: rule does not apply to that project shape.
 
-The summary marks a project as ready only when there are no `fail` or `warn` rules. The harness is intentionally strict about missing README, decisions, tests, CI, manifests, stale or missing workspace context packs, and sensitive local files. It is intentionally softer about Railway because not every asset should deploy to Railway.
+The summary marks a project as ready only when there are no `fail` or `warn` rules. The harness is intentionally strict about missing README, decisions, tests, CI, manifests, stale or missing workspace context packs, and sensitive local files. It is intentionally softer about Railway when the repo clearly declares a CLI-only, research, or competition-first boundary.
 
 ## Development
 
@@ -79,4 +79,4 @@ bin/eval-harness .
 
 ## Current Boundary
 
-This is a local static evaluator. It does not execute each project's full test suite, query GitHub Actions status, or publish repositories. When the project lives under a workspace with `.agents/context-packs`, it also checks whether the generated context pack exists and is not older than the latest commit. Deeper freshness guarantees still belong in later release-coordinator tooling.
+This is a local static evaluator. It does not execute each project's full test suite, query GitHub Actions status, or publish repositories. When the project lives under a workspace with `.agents/context-packs`, it checks whether the generated context pack exists and whether its embedded source-commit provenance matches the latest repo commit, falling back to file mtime for older packs. Deeper freshness guarantees still belong in later release-coordinator tooling.

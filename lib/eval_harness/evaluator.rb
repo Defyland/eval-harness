@@ -189,14 +189,7 @@ module EvalHarness
     end
 
     def test_evidence
-      evidence = []
-      evidence << "test/" if @profile.directory?("test")
-      evidence << "spec/" if @profile.directory?("spec")
-      evidence << "tests/" if @profile.directory?("tests")
-      evidence << "Makefile test target" if @profile.file?("Makefile") && @profile.read("Makefile").match?(/^test:/)
-      evidence << "mix.exs" if @profile.file?("mix.exs")
-      evidence << "scripts/validate_curriculum.rb" if @profile.file?("scripts/validate_curriculum.rb")
-      evidence
+      @profile.test_evidence
     end
 
     def railway_evidence

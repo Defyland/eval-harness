@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "shellwords"
 
 class EvalHarnessTest < Minitest::Test
   def test_ready_ruby_gem_passes_core_rules_without_railway_requirement
@@ -132,6 +133,55 @@ class EvalHarnessTest < Minitest::Test
     end
   end
 
+  def test_cli_go_tool_does_not_require_railway
+    Dir.mktmpdir do |dir|
+      write_cli_go_tool(dir)
+
+      report = EvalHarness::Evaluator.new(dir).evaluate
+
+      assert_equal "go", report[:stack]
+      refute report[:railway_recommended]
+      assert_rule report, "deploy.railway", "n/a"
+    end
+  end
+
+  def test_competition_asset_does_not_require_railway_even_when_it_is_a_rails_app
+    Dir.mktmpdir do |dir|
+      write_competition_rails_app(dir)
+
+      report = EvalHarness::Evaluator.new(dir).evaluate
+
+      assert_equal "rails", report[:stack]
+      refute report[:railway_recommended]
+      assert_rule report, "deploy.railway", "n/a"
+    end
+  end
+
+  def test_recursive_go_test_file_counts_as_test_surface
+    Dir.mktmpdir do |dir|
+      write_go_bootstrap(dir)
+
+      report = EvalHarness::Evaluator.new(dir).evaluate
+
+      assert_rule report, "quality.tests", "pass"
+      rule = report[:rules].find { |candidate| candidate[:id] == "quality.tests" }
+      assert_includes rule[:evidence], "internal/bootstrapapi/handler_test.go"
+    end
+  end
+
+  def test_research_root_contract_counts_as_test_surface_and_skips_railway
+    Dir.mktmpdir do |dir|
+      write_research_asset(dir)
+
+      report = EvalHarness::Evaluator.new(dir).evaluate
+
+      assert_rule report, "quality.tests", "pass"
+      assert_rule report, "deploy.railway", "n/a"
+      rule = report[:rules].find { |candidate| candidate[:id] == "quality.tests" }
+      assert_includes rule[:evidence], "bin/check"
+    end
+  end
+
   def test_missing_workspace_context_pack_warns_when_registry_exists
     Dir.mktmpdir do |workspace|
       dir = File.join(workspace, "ruby-tool")
@@ -177,6 +227,29 @@ class EvalHarnessTest < Minitest::Test
       rule = report[:rules].find { |candidate| candidate[:id] == "ai.context_pack" }
       assert_includes rule[:evidence], ".agents/context-packs/ready-gem.md"
       assert_includes rule[:message], "older than the latest commit"
+    end
+  end
+
+  def test_context_pack_with_matching_commit_metadata_passes_even_when_file_mtime_is_old
+    Dir.mktmpdir do |workspace|
+      dir = File.join(workspace, "ready-gem")
+      FileUtils.mkdir_p(File.join(workspace, ".agents/context-packs"))
+      write_ready_gem(dir)
+      init_git_repo(dir)
+      system("git", "-C", dir, "add", ".")
+      system("git", "-C", dir, "commit", "-m", "Initial import", out: File::NULL, err: File::NULL)
+      commit_sha = `git -C #{Shellwords.escape(dir)} log -1 --format=%H`.strip
+
+      pack = File.join(workspace, ".agents/context-packs", "ready-gem.md")
+      File.write(pack, <<~PACK)
+        <!-- context-pack-builder-meta {"project":"ready-gem","generated_at":"2026-06-29T12:00:00Z","git_commit":"#{commit_sha}","git_branch":"main"} -->
+        # Context Pack: ready-gem
+      PACK
+      File.utime(Time.at(1), Time.at(1), pack)
+
+      report = EvalHarness::Evaluator.new(dir).evaluate
+
+      assert_rule report, "ai.context_pack", "pass"
     end
   end
 
@@ -261,6 +334,92 @@ class EvalHarnessTest < Minitest::Test
     system("git", "-C", dir, "init", "-q")
     system("git", "-C", dir, "config", "user.name", "Eval Harness")
     system("git", "-C", dir, "config", "user.email", "eval@example.com")
+  end
+
+  def write_cli_go_tool(dir)
+    FileUtils.mkdir_p(File.join(dir, ".github/workflows"))
+    FileUtils.mkdir_p(File.join(dir, "cmd/tokenforge"))
+    FileUtils.mkdir_p(File.join(dir, "docs"))
+    File.write(File.join(dir, "README.md"), <<~README)
+      # TokenForge
+
+      This is a command-line product.
+
+      It has no HTTP API and is not a daemon.
+
+      ```sh
+      go test ./...
+      ```
+    README
+    File.write(File.join(dir, "go.mod"), "module example.com/tokenforge\n")
+    File.write(File.join(dir, "docs/decisions.md"), "# Decisions\n")
+    File.write(File.join(dir, "docs/engineering-case-study.md"), "# Case Study\n")
+    File.write(File.join(dir, ".github/workflows/ci.yml"), "name: CI\n")
+  end
+
+  def write_competition_rails_app(dir)
+    FileUtils.mkdir_p(File.join(dir, ".github/workflows"))
+    FileUtils.mkdir_p(File.join(dir, "config"))
+    FileUtils.mkdir_p(File.join(dir, "docs"))
+    FileUtils.mkdir_p(File.join(dir, "test"))
+    File.write(File.join(dir, "README.md"), <<~README)
+      # Competition Rails App
+
+      ```sh
+      bin/rails test
+      ```
+
+      API-only bootstrap for a competition environment.
+    README
+    File.write(File.join(dir, "Gemfile"), "gem 'rails'\n")
+    File.write(File.join(dir, "config/application.rb"), "module App; class Application; end; end\n")
+    File.write(File.join(dir, "docs/decisions.md"), "# Decisions\n")
+    File.write(File.join(dir, "docs/architecture.md"), "# Architecture\n")
+    File.write(File.join(dir, "docs/competition-constraints.md"), "# Constraints\n")
+    File.write(File.join(dir, "test/bootstrap_test.rb"), "assert true\n")
+    File.write(File.join(dir, ".github/workflows/ci.yml"), "name: CI\n")
+  end
+
+  def write_go_bootstrap(dir)
+    FileUtils.mkdir_p(File.join(dir, ".github/workflows"))
+    FileUtils.mkdir_p(File.join(dir, "docs"))
+    FileUtils.mkdir_p(File.join(dir, "internal/bootstrapapi"))
+    File.write(File.join(dir, "README.md"), <<~README)
+      # Go Bootstrap
+
+      ```sh
+      go test ./...
+      ```
+    README
+    File.write(File.join(dir, "go.mod"), "module example.com/bootstrap\n")
+    File.write(File.join(dir, "docs/decisions.md"), "# Decisions\n")
+    File.write(File.join(dir, "docs/architecture.md"), "# Architecture\n")
+    File.write(File.join(dir, "internal/bootstrapapi/handler_test.go"), "package bootstrapapi\n")
+    File.write(File.join(dir, ".github/workflows/ci.yml"), "name: CI\n")
+  end
+
+  def write_research_asset(dir)
+    FileUtils.mkdir_p(File.join(dir, ".github/workflows"))
+    FileUtils.mkdir_p(File.join(dir, "docs"))
+    FileUtils.mkdir_p(File.join(dir, "bin"))
+    FileUtils.mkdir_p(File.join(dir, "lib"))
+    File.write(File.join(dir, "README.md"), <<~README)
+      # Research Asset
+
+      R&D asset and falsification experiment.
+
+      This is not a deployable service.
+
+      ```sh
+      bin/check
+      ```
+    README
+    File.write(File.join(dir, "Gemfile"), "source 'https://rubygems.org'\n")
+    File.write(File.join(dir, "docs/decisions.md"), "# Decisions\n")
+    File.write(File.join(dir, "docs/architecture.md"), "# Architecture\n")
+    File.write(File.join(dir, "bin/check"), "#!/usr/bin/env ruby\n")
+    File.write(File.join(dir, "lib/experiment.rb"), "# frozen_string_literal: true\n")
+    File.write(File.join(dir, ".github/workflows/ci.yml"), "name: CI\n")
   end
 
   def write_study_content(dir)
