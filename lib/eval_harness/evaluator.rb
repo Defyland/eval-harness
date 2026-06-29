@@ -29,6 +29,7 @@ module EvalHarness
         architecture_rule,
         tests_rule,
         ci_rule,
+        context_pack_rule,
         railway_rule,
         secret_rule,
         git_rule,
@@ -95,6 +96,43 @@ module EvalHarness
         Rule.new(id: "quality.ci", status: "fail", message: "GitHub Actions CI is required", evidence: [])
       else
         Rule.new(id: "quality.ci", status: "pass", message: "CI workflows detected", evidence: files)
+      end
+    end
+
+    def context_pack_rule
+      return Rule.new(
+        id: "ai.context_pack",
+        status: "n/a",
+        message: "No workspace context-pack registry detected",
+        evidence: []
+      ) unless @profile.context_pack_applicable?
+
+      evidence = [@profile.context_pack_relative_path]
+
+      unless @profile.context_pack_present?
+        return Rule.new(
+          id: "ai.context_pack",
+          status: "warn",
+          message: "Workspace context pack is missing",
+          evidence: evidence
+        )
+      end
+
+      if @profile.context_pack_stale?
+        evidence << @git[:recent_commits].first if @git[:recent_commits].first
+        Rule.new(
+          id: "ai.context_pack",
+          status: "warn",
+          message: "Workspace context pack is older than the latest commit",
+          evidence: evidence
+        )
+      else
+        Rule.new(
+          id: "ai.context_pack",
+          status: "pass",
+          message: "Workspace context pack exists and is current enough for review",
+          evidence: evidence
+        )
       end
     end
 

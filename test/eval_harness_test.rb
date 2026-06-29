@@ -17,6 +17,7 @@ class EvalHarnessTest < Minitest::Test
       assert_rule report, "docs.architecture", "pass"
       assert_rule report, "quality.tests", "pass"
       assert_rule report, "quality.ci", "pass"
+      assert_rule report, "ai.context_pack", "n/a"
       assert_rule report, "deploy.railway", "n/a"
       assert_rule report, "security.sensitive_files", "pass"
       assert_rule report, "project.manifest", "pass"
@@ -126,7 +127,56 @@ class EvalHarnessTest < Minitest::Test
 
       assert_equal "ruby-tool", report[:stack]
       refute report[:railway_recommended]
+      assert_rule report, "ai.context_pack", "n/a"
       assert_rule report, "deploy.railway", "n/a"
+    end
+  end
+
+  def test_missing_workspace_context_pack_warns_when_registry_exists
+    Dir.mktmpdir do |workspace|
+      dir = File.join(workspace, "ruby-tool")
+      FileUtils.mkdir_p(File.join(workspace, ".agents/context-packs"))
+      write_ruby_tool(dir)
+
+      report = EvalHarness::Evaluator.new(dir).evaluate
+
+      assert_rule report, "ai.context_pack", "warn"
+      rule = report[:rules].find { |candidate| candidate[:id] == "ai.context_pack" }
+      assert_includes rule[:evidence], ".agents/context-packs/ruby-tool.md"
+    end
+  end
+
+  def test_stale_workspace_context_pack_warns_when_project_is_newer_than_pack
+    Dir.mktmpdir do |workspace|
+      dir = File.join(workspace, "ready-gem")
+      FileUtils.mkdir_p(File.join(workspace, ".agents/context-packs"))
+      write_ready_gem(dir)
+      init_git_repo(dir)
+      system("git", "-C", dir, "add", ".")
+      system("git", "-C", dir, "commit", "-m", "Initial import", out: File::NULL, err: File::NULL)
+
+      pack = File.join(workspace, ".agents/context-packs", "ready-gem.md")
+      File.write(pack, "# Context Pack\n")
+      File.utime(Time.at(1), Time.at(1), pack)
+
+      File.write(File.join(dir, "README.md"), <<~README)
+        # Ready Gem
+
+        ```sh
+        bundle exec rake test
+        ```
+
+        Updated after context pack generation.
+      README
+      system("git", "-C", dir, "add", "README.md")
+      system("git", "-C", dir, "commit", "-m", "Update readme", out: File::NULL, err: File::NULL)
+
+      report = EvalHarness::Evaluator.new(dir).evaluate
+
+      assert_rule report, "ai.context_pack", "warn"
+      rule = report[:rules].find { |candidate| candidate[:id] == "ai.context_pack" }
+      assert_includes rule[:evidence], ".agents/context-packs/ready-gem.md"
+      assert_includes rule[:message], "older than the latest commit"
     end
   end
 

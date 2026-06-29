@@ -1,7 +1,11 @@
 # frozen_string_literal: true
 
+require "open3"
+
 module EvalHarness
   class ProjectProfile
+    CONTEXT_PACKS_DIR = File.join(".agents", "context-packs").freeze
+
     attr_reader :root
 
     def initialize(root)
@@ -115,6 +119,27 @@ module EvalHarness
       candidates.select { |path| file?(path) }
     end
 
+    def context_pack_applicable?
+      !context_pack_registry_root.nil?
+    end
+
+    def context_pack_relative_path
+      File.join(CONTEXT_PACKS_DIR, "#{name}.md")
+    end
+
+    def context_pack_present?
+      !context_pack_path.nil?
+    end
+
+    def context_pack_stale?
+      return false unless context_pack_present?
+
+      commit_timestamp = latest_commit_timestamp
+      return false unless commit_timestamp
+
+      File.mtime(context_pack_path).to_i < commit_timestamp
+    end
+
     def secret_warnings
       secret_findings.map { |finding| finding.fetch(:message) }
     end
@@ -177,6 +202,46 @@ module EvalHarness
 
     def ignored_file?(path)
       system("git", "-C", root, "check-ignore", "-q", path, out: File::NULL, err: File::NULL)
+    end
+
+    def context_pack_registry_root
+      return @context_pack_registry_root if defined?(@context_pack_registry_root)
+
+      current = root
+      loop do
+        if File.directory?(File.join(current, CONTEXT_PACKS_DIR))
+          @context_pack_registry_root = current
+          return @context_pack_registry_root
+        end
+
+        parent = File.dirname(current)
+        break if parent == current
+
+        current = parent
+      end
+
+      @context_pack_registry_root = nil
+    end
+
+    def context_pack_path
+      return nil unless context_pack_applicable?
+
+      absolute = File.join(context_pack_registry_root, context_pack_relative_path)
+      File.file?(absolute) ? absolute : nil
+    end
+
+    def latest_commit_timestamp
+      return nil unless git_available?
+
+      timestamp = capture_git("log", "-1", "--format=%ct").strip
+      return nil if timestamp.empty?
+
+      timestamp.to_i
+    end
+
+    def capture_git(*args)
+      stdout, _stderr, status = Open3.capture3("git", "-C", root, *args)
+      status.success? ? stdout : ""
     end
 
     def relative(path)

@@ -37,3 +37,40 @@ Verification evidence:
 
 - `bundle exec rake test`
 - `bin/eval-harness .`
+
+## 2026-06-29 - Check Workspace Context Pack Coverage Before Calling A Repo AI-Ready
+
+Context: `context-pack-builder` now packages high-signal docs, manifests, CI, ADRs, and contract tests, but `eval-harness` still had no rule proving that a repository actually had a generated context pack available for review. In this workspace, cheap-model operability depends on that artifact being present and not obviously stale.
+
+Options considered:
+
+- Leave context-pack generation outside the readiness contract.
+- Require context packs for every evaluated repository everywhere.
+- Check for workspace context-pack coverage only when a shared `.agents/context-packs` registry exists, and warn when the pack is missing or older than the latest commit.
+
+Choice: Add a workspace-aware context-pack rule that stays `n/a` outside the orchestrated workspace and warns for missing or stale packs inside it.
+
+Pros:
+
+- Makes reviewer-operability visible in under five minutes.
+- Catches a real failure mode: code changes land but the shared context artifact is not regenerated.
+- Preserves portability for repositories evaluated outside this workspace.
+- Keeps the rule static and fast.
+
+Cons:
+
+- File mtime is a heuristic, not a semantic diff against project state.
+- Repositories with unusual context-pack locations are not detected.
+- A current-enough file can still be low quality.
+
+Consequences:
+
+- AI-ready readiness in this workspace now depends on regenerating context packs after meaningful commits.
+- `context-pack-builder` remains the producer of the artifact; `eval-harness` only checks coverage/freshness.
+- Later tooling can add stronger freshness proofs without changing this initial reviewer-facing contract.
+
+Verification evidence:
+
+- `ruby -Itest test/eval_harness_test.rb`
+- `bundle exec rake test`
+- `bin/eval-harness ../context-pack-builder`
