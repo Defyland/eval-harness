@@ -80,3 +80,7 @@ bin/eval-harness .
 ## Current Boundary
 
 This is a local static evaluator. It does not execute each project's full test suite, query GitHub Actions status, or publish repositories. When the project lives under a workspace with `.agents/context-packs`, it checks whether the generated context pack exists and whether its embedded source-commit provenance matches the latest repo commit, falling back to file mtime for older packs. Deeper freshness guarantees still belong in later release-coordinator tooling.
+
+## License
+
+MIT. See [LICENSE.txt](./LICENSE.txt).

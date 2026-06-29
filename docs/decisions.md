@@ -110,3 +110,38 @@ Verification evidence:
 - `ruby -Itest test/eval_harness_test.rb`
 - `bin/eval-harness ../context-pack-builder`
 - `bin/eval-harness ../ractorized-rails-kernel`
+
+## 2026-06-29 - Publish The Harness Under MIT
+
+Context: `eval-harness` is a public contract tool for the workspace. It is
+supposed to be copied, adapted, and embedded into future repo-facing
+automation, so leaving the repo unlicensed would undercut that intended use.
+
+Options considered:
+
+- leave the repo unlicensed
+- choose a restrictive or reciprocal license
+- publish under MIT
+
+Choice: publish under MIT.
+
+Pros:
+
+- keeps the evaluator easy to reuse across future assets
+- matches the workspace goal of cheap-model-operable tooling
+- removes ambiguity for repos that want to copy the readiness contract locally
+
+Cons:
+
+- broad reuse comes with limited reciprocity
+- does not impose contribution-back requirements
+
+Consequences:
+
+- the readiness contract is now explicitly reusable, not only practically copyable
+- future publication audits can treat license surface as part of the tooling standard
+
+Verification evidence:
+
+- `bundle exec rake test`
+- `bin/eval-harness .`
