@@ -116,11 +116,15 @@ module EvalHarness
     end
 
     def secret_warnings
-      warnings = []
-      warnings << ".env present" if file?(".env")
-      warnings << "Rails master key present" if file?("config/master.key")
-      warnings << "Kamal secrets file present" if file?(".kamal/secrets")
-      warnings
+      secret_findings.map { |finding| finding.fetch(:message) }
+    end
+
+    def secret_findings
+      findings = []
+      append_secret_finding(findings, ".env", ".env present")
+      append_secret_finding(findings, "config/master.key", "Rails master key present")
+      append_secret_finding(findings, ".kamal/secrets", "Kamal secrets file present")
+      findings
     end
 
     def manifest_files
@@ -145,6 +149,35 @@ module EvalHarness
     end
 
     private
+
+    def append_secret_finding(findings, path, message)
+      return unless file?(path)
+
+      status = secret_file_status(path)
+      return if status == "pass"
+
+      findings << {status: status, message: message}
+    end
+
+    def secret_file_status(path)
+      return "fail" unless git_available?
+      return "fail" if tracked_file?(path)
+      return "warn" unless ignored_file?(path)
+
+      "pass"
+    end
+
+    def git_available?
+      system("git", "-C", root, "rev-parse", "--is-inside-work-tree", out: File::NULL, err: File::NULL)
+    end
+
+    def tracked_file?(path)
+      system("git", "-C", root, "ls-files", "--error-unmatch", path, out: File::NULL, err: File::NULL)
+    end
+
+    def ignored_file?(path)
+      system("git", "-C", root, "check-ignore", "-q", path, out: File::NULL, err: File::NULL)
+    end
 
     def relative(path)
       path.delete_prefix("#{root}#{File::SEPARATOR}")

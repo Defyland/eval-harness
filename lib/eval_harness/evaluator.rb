@@ -111,11 +111,23 @@ module EvalHarness
     end
 
     def secret_rule
-      warnings = @profile.secret_warnings
-      if warnings.empty?
+      findings = @profile.secret_findings
+      if findings.empty?
         Rule.new(id: "security.sensitive_files", status: "pass", message: "No common sensitive local files detected", evidence: [])
+      elsif findings.any? { |finding| finding.fetch(:status) == "fail" }
+        Rule.new(
+          id: "security.sensitive_files",
+          status: "fail",
+          message: "Sensitive files are tracked or otherwise publishable",
+          evidence: findings.map { |finding| finding.fetch(:message) }
+        )
       else
-        Rule.new(id: "security.sensitive_files", status: "fail", message: "Sensitive local files must not be published", evidence: warnings)
+        Rule.new(
+          id: "security.sensitive_files",
+          status: "warn",
+          message: "Sensitive local files exist but are not currently publishable",
+          evidence: findings.map { |finding| finding.fetch(:message) }
+        )
       end
     end
 

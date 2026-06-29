@@ -41,6 +41,53 @@ class EvalHarnessTest < Minitest::Test
     end
   end
 
+  def test_ignored_local_secret_passes_when_git_repo_exists
+    Dir.mktmpdir do |dir|
+      write_rails_app(dir)
+      File.write(File.join(dir, ".gitignore"), "/config/*.key\n")
+      init_git_repo(dir)
+      system("git", "-C", dir, "add", ".")
+      system("git", "-C", dir, "commit", "-m", "Initial import", out: File::NULL, err: File::NULL)
+
+      report = EvalHarness::Evaluator.new(dir).evaluate
+
+      assert_rule report, "security.sensitive_files", "pass"
+    end
+  end
+
+  def test_tracked_kamal_secret_fails_even_when_it_is_safe_template_content
+    Dir.mktmpdir do |dir|
+      write_rails_app(dir)
+      FileUtils.mkdir_p(File.join(dir, ".kamal"))
+      File.write(File.join(dir, ".kamal/secrets"), "RAILS_MASTER_KEY=$(cat config/master.key)\n")
+      init_git_repo(dir)
+      system("git", "-C", dir, "add", ".")
+      system("git", "-C", dir, "commit", "-m", "Initial import", out: File::NULL, err: File::NULL)
+
+      report = EvalHarness::Evaluator.new(dir).evaluate
+
+      assert_rule report, "security.sensitive_files", "fail"
+      secret_rule = report[:rules].find { |rule| rule[:id] == "security.sensitive_files" }
+      assert_includes secret_rule[:evidence], "Kamal secrets file present"
+    end
+  end
+
+  def test_unignored_local_secret_warns_when_git_repo_exists
+    Dir.mktmpdir do |dir|
+      write_rails_app(dir)
+      init_git_repo(dir)
+      system("git", "-C", dir, "add", ".")
+      system("git", "-C", dir, "commit", "-m", "Initial import", out: File::NULL, err: File::NULL)
+      system("git", "-C", dir, "rm", "--cached", "config/master.key", out: File::NULL, err: File::NULL)
+
+      report = EvalHarness::Evaluator.new(dir).evaluate
+
+      assert_rule report, "security.sensitive_files", "warn"
+      secret_rule = report[:rules].find { |rule| rule[:id] == "security.sensitive_files" }
+      assert_includes secret_rule[:evidence], "Rails master key present"
+    end
+  end
+
   def test_weak_project_fails_essential_rules
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "README.md"), "# Weak\n")
@@ -158,6 +205,12 @@ class EvalHarnessTest < Minitest::Test
     File.write(File.join(dir, "config/master.key"), "do-not-copy\n")
     File.write(File.join(dir, "docs/decisions.md"), "# Decisions\n")
     File.write(File.join(dir, ".github/workflows/ci.yml"), "name: CI\n")
+  end
+
+  def init_git_repo(dir)
+    system("git", "-C", dir, "init", "-q")
+    system("git", "-C", dir, "config", "user.name", "Eval Harness")
+    system("git", "-C", dir, "config", "user.email", "eval@example.com")
   end
 
   def write_study_content(dir)
