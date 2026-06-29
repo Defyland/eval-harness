@@ -13,6 +13,7 @@ DEPENDENCIES
   rake (~> 13.2)
 
 CHECKSUMS
+  bundler (4.0.11) sha256=5bcec0fb78302e48d02ee46f10ee6e6942be647ba5b44a6d1ddfda9a240ce785
   minitest (5.27.0)
   rake (13.4.2)
 
