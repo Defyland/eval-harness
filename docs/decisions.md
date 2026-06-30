@@ -38,6 +38,51 @@ Verification evidence:
 - `bundle exec rake test`
 - `bin/eval-harness .`
 
+## 2026-06-30 - Add A Canonical Check Entrypoint And A Five-Minute Proof Path
+
+Context: `eval-harness` already had tests, CI, and a concise README, but it
+still made a reviewer infer the operational path from separate sections. That
+is enough for a careful engineer, not for a cheap model or a five-minute
+technical review. The repo needed one canonical local gate plus a short
+evidence path that proves both self-evaluation and cross-project output.
+
+Options considered:
+
+- keep `bundle exec rake test` as the only verification entrypoint
+- document a quick proof path without adding a canonical script
+- add `bin/check`, route CI through it, and document a short evaluation flow
+
+Choice: add `bin/check`, make CI use it, and add a five-minute evaluation path
+to the README.
+
+Pros:
+
+- gives humans and models a single verification entrypoint to run first
+- reduces drift between local verification and CI
+- makes the repo's operational contract visible in under five minutes
+- proves both human-readable and JSON output paths from the public README
+
+Cons:
+
+- adds a small shell wrapper that must stay aligned with the intended contract
+- self-evaluation inside the workspace still depends on context-pack freshness
+  as part of the broader readiness system
+
+Consequences:
+
+- future changes should update `bin/check` first when the local verification
+  contract changes
+- CI now exercises the same entrypoint the README recommends
+- reviewers and cheap models get a shorter, more reproducible path to trust the
+  tool
+
+Verification evidence:
+
+- `bundle exec rake test`
+- `bin/check`
+- `bin/eval-harness .`
+- `bin/eval-harness ../rails_doctor --format json --output /tmp/rails_doctor-readiness.json`
+
 ## 2026-06-29 - Check Workspace Context Pack Coverage Before Calling A Repo AI-Ready
 
 Context: `context-pack-builder` now packages high-signal docs, manifests, CI, ADRs, and contract tests, but `eval-harness` still had no rule proving that a repository actually had a generated context pack available for review. In this workspace, cheap-model operability depends on that artifact being present and not obviously stale.

@@ -54,6 +54,37 @@ Fail the process when any project has a failing rule:
 bin/eval-harness ../rails_doctor --fail-on fail
 ```
 
+## How to evaluate this repo in 5 minutes
+
+1. Run the standard local gate:
+
+```sh
+bin/check
+```
+
+2. Prove the harness evaluates itself and reports the current repo state:
+
+```sh
+bin/eval-harness .
+```
+
+3. Prove it emits a reusable machine-readable report for another project:
+
+```sh
+bin/eval-harness ../rails_doctor --format json --output /tmp/rails_doctor-readiness.json
+sed -n '1,40p' /tmp/rails_doctor-readiness.json
+```
+
+What those checks prove:
+
+- `bin/check` proves the canonical verification entrypoint runs the Ruby test
+  suite and the harness's own readiness gate together.
+- `bin/eval-harness .` proves the repo is measured by the same contract it
+  expects from other technical assets. On a clean checkout with a current
+  workspace context pack, that should report `yes / 10 pass / 0 warn / 0 fail`.
+- The JSON export proves the tool is not only human-readable; it can also feed
+  cheap models, dashboards, and release automation with structured evidence.
+
 ## Interpreting Results
 
 - `fail`: project is not ready for public release or cheap-model operation.
@@ -65,13 +96,19 @@ The summary marks a project as ready only when there are no `fail` or `warn` rul
 
 ## Development
 
-Run tests:
+Run the standard local gate:
+
+```sh
+bin/check
+```
+
+Run the narrower Ruby test suite directly:
 
 ```sh
 bundle exec rake test
 ```
 
-Run the harness against itself:
+Run the harness against itself without the test suite:
 
 ```sh
 bin/eval-harness .
